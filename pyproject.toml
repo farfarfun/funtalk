@@ -1,6 +1,6 @@
 [project]
-name = "funtts"
-version = "1.0.1"
+name = "fun-tts"
+version = "1.0.2"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.8"
