@@ -1316,7 +1316,7 @@ class AzureTTS(BaseTTS):
 
 def tts(
     text: str, voice_name: str, voice_rate: float, voice_file: str, subtitle_file: str
-) -> [SubMaker, None]:
+) -> [BaseTTS, None]:
     if AzureTTS.check(voice_name):
         client = AzureTTS(voice_name=voice_name)
     else:
@@ -1327,3 +1327,4 @@ def tts(
         voice_file=voice_file,
         subtitle_file=subtitle_file,
     )
+    return client
