@@ -2,6 +2,6 @@ version = 1
 requires-python = ">=3.8"
 
 [[package]]
-name = "funspeech"
-version = "1.0.6"
+name = "funtalk"
+version = "1.0.7"
 source = { virtual = "." }
