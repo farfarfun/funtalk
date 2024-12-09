@@ -1314,7 +1314,7 @@ class AzureTTS(BaseTTS):
         return None
 
 
-def tts(
+def tts_generater(
     text: str, voice_name: str, voice_rate: float, voice_file: str, subtitle_file: str
 ) -> [BaseTTS, None]:
     if AzureTTS.check(voice_name):
