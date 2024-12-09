@@ -1,10 +1,11 @@
 import asyncio
+from typing import List
 
-from edge_tts import Communicate
+from edge_tts import Communicate, list_voices
 from edge_tts import SubMaker
-from funutil import getLogger
-
-from .base import BaseTTS
+from funtalk.tts.base import BaseTTS
+from funutil import getLogger, deep_get
+from funutil.util.retrying import retry
 
 logger = getLogger("funtalk")
 
@@ -23,40 +24,44 @@ class EdgeTTS(BaseTTS):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    @staticmethod
+    def list_voices(gender=None, locale="zh-CN") -> List[str]:
+        result = []
+        voice_list = asyncio.run(list_voices())
+        for voice in voice_list:
+            if locale and deep_get(voice, "Locale") != locale:
+                continue
+            if gender and deep_get(voice, "Gender") != gender:
+                continue
+            result.append(voice)
+
+            print(voice)
+
+        return result
+
+    @retry(4)
     def _tts(
         self, text: str, voice_rate: float, voice_file: str, *args, **kwargs
     ) -> [SubMaker, None]:
         text = text.strip()
         rate_str = convert_rate_to_percent(voice_rate)
-        for i in range(3):
-            try:
-                logger.info(f"start, voice name: {self.voice_name}, try: {i + 1}")
+        communicate = Communicate(text, self.voice_name, rate=rate_str)
+        sub_maker = SubMaker()
 
-                async def _do() -> SubMaker:
-                    communicate = Communicate(text, self.voice_name, rate=rate_str)
-                    sub_maker = SubMaker()
-                    with open(voice_file, "wb") as file:
-                        async for chunk in communicate.stream():
-                            if chunk["type"] == "audio":
-                                file.write(chunk["data"])
-                            elif chunk["type"] == "WordBoundary":
-                                sub_maker.create_sub(
-                                    (chunk["offset"], chunk["duration"]), chunk["text"]
-                                )
-                    return sub_maker
-
-                sub_maker = asyncio.run(_do())
-                if not sub_maker or not sub_maker.subs:
-                    logger.warning(
-                        f"failed, sub_maker is None or sub_maker.subs is None"
+        with open(voice_file, "wb") as file:
+            for chunk in communicate.stream_sync():
+                if chunk["type"] == "audio":
+                    file.write(chunk["data"])
+                elif chunk["type"] == "WordBoundary":
+                    sub_maker.create_sub(
+                        (chunk["offset"], chunk["duration"]), chunk["text"]
                     )
-                    continue
-
-                logger.info(f"completed, output file: {voice_file}")
-                return sub_maker
-            except Exception as e:
-                logger.error(f"failed, error: {str(e)}")
-        return None
+        if not sub_maker or not sub_maker.subs:
+            raise Exception(f"failed, sub_maker is None or sub_maker.subs is None")
+        logger.info(
+            f"completed with voice_name:{self.voice_name}, output file: {voice_file}"
+        )
+        return sub_maker
 
 
 def tts_generate(
