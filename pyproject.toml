@@ -1,10 +1,10 @@
 [project]
 name = "funtalk"
-version = "1.0.18"
+version = "1.0.19"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = []
 
 [tool.setuptools]
-license-files = [ "LICENSE",]
+license = "LICENSE"
