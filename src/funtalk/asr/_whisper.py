@@ -10,14 +10,13 @@ class _CustomProgressBar(tqdm.tqdm):
         super().__init__(*args, **kwargs)
 
 
-transcribe_module = sys.modules["whisper.transcribe"]
-transcribe_module.tqdm.tqdm = _CustomProgressBar
-
-
 class WhisperASR(BaseASR):
     def __init__(self, name="turbo", *args, **kwargs):
         super().__init__(*args, **kwargs)
         import whisper
+
+        transcribe_module = sys.modules["whisper.transcribe"]
+        transcribe_module.tqdm.tqdm = _CustomProgressBar
 
         self.model = whisper.load_model(name, *args, **kwargs)
 
