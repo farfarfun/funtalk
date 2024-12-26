@@ -21,4 +21,4 @@ class WhisperASR(BaseASR):
         self.model = whisper.load_model(name, *args, **kwargs)
 
     def transcribe(self, audio, language="ZH", *args, **kwargs):
-        self.model.transcribe(audio, language=language, *args, **kwargs)
+        return self.model.transcribe(audio, language=language, *args, **kwargs)
