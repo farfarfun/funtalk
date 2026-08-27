@@ -3,11 +3,23 @@ name = "funtalk"
 version = "1.0.26"
 description = "funtalk"
 readme = "README.md"
-requires-python = ">=3.8"
-dependencies = []
+requires-python = ">=3.11"
+dependencies = [
+    "edge-tts~=6.1.10",
+    "funutil",
+    "funvideo",
+    "moviepy",
+    "openai-whisper",
+    "tqdm",
+]
 [[project.authors]]
 name = "niuliangtao"
 email = "farfarfun@qq.com"
 
 [tool.setuptools]
 license-files = []
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
