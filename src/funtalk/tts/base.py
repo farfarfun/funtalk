@@ -5,8 +5,9 @@ from xml.sax.saxutils import unescape
 from edge_tts import SubMaker
 from edge_tts.submaker import mktimestamp
 from funutil import getLogger
-from funvideo.app.utils import utils
 from moviepy.video.tools import subtitles
+
+from funtalk._util import split_string_by_punctuations
 
 logger = getLogger("funtalk")
 
@@ -58,7 +59,7 @@ class BaseTTS:
         sub_items = []
         sub_index = 0
 
-        script_lines = utils.split_string_by_punctuations(text)
+        script_lines = split_string_by_punctuations(text)
 
         def match_line(_sub_line: str, _sub_index: int):
             if len(script_lines) <= _sub_index:

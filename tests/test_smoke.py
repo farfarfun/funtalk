@@ -11,11 +11,13 @@ funtalk 冒烟测试套件。
 按任务约定改为在测试中于 sys.modules 级别打桩，只验证 funtalk 对 whisper 模块
 的调用方式（load_model / transcribe）是否与桩模块契合。
 
-关于 funvideo.app.config：这是 funtalk 的一个真实上游依赖（AzureTTS 用到了
-`funvideo.app.config.config`），但该模块在导入时会硬编码读取当前工作目录下的
-`./config.toml`，若文件不存在会直接抛出 FileNotFoundError（这是 funvideo 自身的
-一个健壮性问题，不在本仓库改动范围内）。测试中通过 chdir 到一个带有最小
-config.toml 的临时目录来规避。
+关于 funvideo（farfarfun/todo-list#156）：funtalk 之前 `import funvideo` 来获取
+`split_string_by_punctuations()` 和 Azure 语音凭据（`funvideo.app.config.config`），
+而 funvideo 的 pyproject.toml 又声明依赖 funtalk，构成循环依赖。已修复：
+`split_string_by_punctuations` 复制为本地的 `funtalk._util`（纯函数，无第三方依赖），
+Azure 凭据改为直接读环境变量 `AZURE_SPEECH_KEY`/`AZURE_SPEECH_REGION`，不再依赖
+funvideo 的全局 config 单例（该单例本身在 import 时还有读取 `./config.toml` 的
+副作用）。funtalk 现在完全不 import funvideo。
 """
 
 import asyncio
@@ -129,6 +131,22 @@ def test_base_tts_format_text_strips_brackets():
     assert "{" not in formatted
 
 
+def test_split_string_by_punctuations_is_local_to_funtalk():
+    """#156: this used to be funvideo.app.utils.utils.split_string_by_punctuations."""
+    import sys
+
+    from funtalk._util import split_string_by_punctuations
+
+    assert split_string_by_punctuations("你好，世界。这是一个测试！") == [
+        "你好",
+        "世界",
+        "这是一个测试",
+    ]
+    # decimal points aren't treated as sentence breaks
+    assert split_string_by_punctuations("单价2.5元") == ["单价2.5元"]
+    assert "funvideo" not in sys.modules
+
+
 # ---------------------------------------------------------------------------
 # 4. TTS：EdgeTTS（mock 掉真实的 edge_tts 网络调用）
 # ---------------------------------------------------------------------------
@@ -216,22 +234,32 @@ def test_edge_tts_list_voices_mocked(monkeypatch):
 
 # ---------------------------------------------------------------------------
 # 5. TTS：AzureTTS
-#
-# funvideo.app.config 在 import 时会读取当前工作目录下的 ./config.toml，
-# 若不存在会抛出 FileNotFoundError（funvideo 自身的问题，不在本仓库改动范围）。
-# 这里通过 chdir 到一个带有最小 config.toml 的临时目录来完成首次 import。
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def azure_tts_class(tmp_path, monkeypatch):
-    config_file = tmp_path / "config.toml"
-    config_file.write_text("[app]\n", encoding="utf-8")
-    monkeypatch.chdir(tmp_path)
-
+def azure_tts_class():
     from funtalk.tts._azure import AzureTTS
 
     return AzureTTS
+
+
+def test_azure_tts_reads_credentials_from_env_not_funvideo_config(
+    azure_tts_class, tmp_path, monkeypatch
+):
+    """#156: Azure speech_key/speech_region used to come from
+    funvideo.app.config.config.azure; now read straight from env vars,
+    with no funvideo import involved at all."""
+    import sys
+
+    assert "funvideo" not in sys.modules
+
+    monkeypatch.setenv("AZURE_SPEECH_KEY", "test-key")
+    monkeypatch.setenv("AZURE_SPEECH_REGION", "test-region")
+    import os
+
+    assert os.environ["AZURE_SPEECH_KEY"] == "test-key"
+    assert os.environ["AZURE_SPEECH_REGION"] == "test-region"
 
 
 def test_azure_tts_construction(azure_tts_class):

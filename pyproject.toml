@@ -1,13 +1,12 @@
 [project]
 name = "funtalk"
-version = "1.0.26"
+version = "1.0.27"
 description = "funtalk"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "edge-tts~=6.1.10",
     "funutil",
-    "funvideo",
     "moviepy",
     "openai-whisper",
     "tqdm",

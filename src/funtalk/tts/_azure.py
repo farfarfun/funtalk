@@ -1,8 +1,8 @@
+import os
 from datetime import datetime
 
 from edge_tts import SubMaker
 from funutil import getLogger
-from funvideo.app.config import config
 
 from .base import BaseTTS
 
@@ -1068,8 +1068,8 @@ class AzureTTS(BaseTTS):
                     sub_maker.offset.append((offset, offset + duration))
 
                 # Creates an instance of a speech config with specified subscription key and service region.
-                speech_key = config.azure.get("speech_key", "")
-                service_region = config.azure.get("speech_region", "")
+                speech_key = os.environ.get("AZURE_SPEECH_KEY", "")
+                service_region = os.environ.get("AZURE_SPEECH_REGION", "")
                 audio_config = speechsdk.audio.AudioOutputConfig(
                     filename=voice_file, use_default_speaker=True
                 )
