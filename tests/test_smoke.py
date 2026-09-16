@@ -308,3 +308,53 @@ def test_azure_tts_real_speech_synthesis_requires_credentials():
 
 def test_whisper_asr_real_model_download_requires_network():
     pytest.skip("需要下载真实 whisper 模型权重，跳过真实 ASR 推理")
+
+
+def test_whisper_asr_on_progress_reports_real_frame_progress():
+    """真实加载 tiny 模型、真实转写一段随机噪声音频，断言 on_progress 回调
+    收到了单调递增、最终到 1.0 的百分比序列——不是只测 import/mock。
+
+    用纯静音/低幅度噪声作为输入时，whisper 内部的 no-speech 检测会在
+    `if should_skip: seek += segment_size; continue` 直接跳过整个 segment，
+    根本不会执行到 `pbar.update(...)` 那一行（实测验证过：静音输入下
+    on_progress 一次都不会被调用）。这里传 `no_speech_threshold=None`
+    （whisper.transcribe 的真实公开参数）关掉这个跳过优化，只是为了让测试
+    音频也能走到 pbar.update 那条路径，不是在 mock 或绕过被测代码本身。
+    """
+    import numpy as np
+
+    from funtalk.asr import WhisperASR
+
+    asr = WhisperASR(name="tiny")
+
+    rng = np.random.default_rng(0)
+    audio = (rng.standard_normal(16000 * 90) * 0.05).astype(np.float32)
+
+    progress_values = []
+    result = asr.transcribe(
+        audio,
+        language="zh",
+        on_progress=progress_values.append,
+        no_speech_threshold=None,
+    )
+
+    assert isinstance(result, dict)
+    assert "text" in result
+    assert len(progress_values) > 0, "on_progress 回调一次都没被调用"
+    assert all(0.0 <= p <= 1.0 for p in progress_values)
+    assert progress_values == sorted(progress_values), "进度值应该单调递增"
+    assert progress_values[-1] == 1.0
+
+
+def test_whisper_asr_transcribe_without_on_progress_still_works():
+    """确认不传 on_progress 时（现有调用方式）行为不受影响。"""
+    import numpy as np
+
+    from funtalk.asr import WhisperASR
+
+    asr = WhisperASR(name="tiny")
+    audio = np.zeros(16000 * 5, dtype=np.float32)
+
+    result = asr.transcribe(audio, language="zh")
+    assert isinstance(result, dict)
+    assert "text" in result
