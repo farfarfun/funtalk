@@ -1,13 +1,16 @@
 import asyncio
-from typing import List
-
 from edge_tts import Communicate, list_voices
 from edge_tts import SubMaker
+from farlog import getLogger
 from funtalk.tts.base import BaseTTS
-from funutil import getLogger, deep_get
+from funutil import deep_get
 from funutil.util.retrying import retry
 
 logger = getLogger("funtalk")
+
+
+class TTSSynthesisError(RuntimeError):
+    """TTS 引擎未生成有效音频或字幕时抛出的领域异常。"""
 
 
 def convert_rate_to_percent(rate: float) -> str:
@@ -21,11 +24,15 @@ def convert_rate_to_percent(rate: float) -> str:
 
 
 class EdgeTTS(BaseTTS):
-    def __init__(self, *args, **kwargs):
+    """基于 edge-tts 的语音合成实现。"""
+
+    def __init__(self, *args, **kwargs) -> None:
+        """初始化 Edge TTS 客户端。"""
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def list_voices(gender=None, locale="zh-CN") -> List[str]:
+    def list_voices(gender: str | None = None, locale: str | None = "zh-CN") -> list[dict]:
+        """列出指定性别和区域的可用语音。"""
         result = []
         voice_list = asyncio.run(list_voices())
         for voice in voice_list:
@@ -35,14 +42,12 @@ class EdgeTTS(BaseTTS):
                 continue
             result.append(voice)
 
-            print(voice)
-
         return result
 
     @retry(4)
     def _tts(
         self, text: str, voice_rate: float, voice_file: str, *args, **kwargs
-    ) -> [SubMaker, None]:
+    ) -> SubMaker:
         text = text.strip()
         rate_str = convert_rate_to_percent(voice_rate)
         communicate = Communicate(text, self.voice_name, rate=rate_str)
@@ -57,7 +62,7 @@ class EdgeTTS(BaseTTS):
                         (chunk["offset"], chunk["duration"]), chunk["text"]
                     )
         if not sub_maker or not sub_maker.subs:
-            raise Exception(f"failed, sub_maker is None or sub_maker.subs is None")
+            raise TTSSynthesisError("未生成有效字幕，语音合成结果为空")
         logger.info(
             f"completed with voice_name:{self.voice_name}, output file: {voice_file}"
         )
@@ -66,7 +71,8 @@ class EdgeTTS(BaseTTS):
 
 def tts_generate(
     text: str, voice_name: str, voice_rate: float, voice_file: str, subtitle_file: str
-) -> [BaseTTS, None]:
+) -> BaseTTS:
+    """合成语音并返回 Edge TTS 客户端。"""
     client = EdgeTTS(voice_name)
     client.create_tts(
         text=text,

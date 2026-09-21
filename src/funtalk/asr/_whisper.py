@@ -1,6 +1,6 @@
 import contextvars
 import importlib
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import tqdm
 
@@ -9,7 +9,7 @@ from .base import BaseASR
 # whisper's transcribe() creates its own tqdm.tqdm(...) instance internally --
 # we can't pass a callback through that call, so a contextvar carries the
 # "current call's" progress sink across the monkey-patched class instead.
-_progress_sink: "contextvars.ContextVar[Optional[Callable[[float], None]]]" = (
+_progress_sink: contextvars.ContextVar[Callable[[float], None] | None] = (
     contextvars.ContextVar("funtalk_progress_sink", default=None)
 )
 
@@ -30,7 +30,10 @@ class _CustomProgressBar(tqdm.tqdm):
 
 
 class WhisperASR(BaseASR):
-    def __init__(self, name="turbo", *args, **kwargs):
+    """基于 openai-whisper 的语音识别实现。"""
+
+    def __init__(self, name: str = "turbo", *args, **kwargs) -> None:
+        """加载指定名称的 Whisper 模型。"""
         super().__init__(*args, **kwargs)
         import whisper
 
@@ -54,12 +57,13 @@ class WhisperASR(BaseASR):
 
     def transcribe(
         self,
-        audio,
-        language="ZH",
-        on_progress: Optional[Callable[[float], None]] = None,
+        audio: object,
+        language: str = "ZH",
+        on_progress: Callable[[float], None] | None = None,
         *args,
         **kwargs,
-    ):
+    ) -> dict:
+        """转写音频并按需报告进度。"""
         token = _progress_sink.set(on_progress)
         try:
             return self.model.transcribe(audio, language=language, *args, **kwargs)

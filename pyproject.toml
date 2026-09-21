@@ -3,13 +3,12 @@ name = "funtalk"
 version = "1.0.31"
 description = "funtalk"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "edge-tts~=6.1.10",
-    "funutil",
-    "moviepy",
-    "openai-whisper",
-    "tqdm",
+    "farlog>=1.1.7",
+    "funutil>=1.0.50",
+    "tqdm>=4.66",
 ]
 license = "MIT"
 license-files = ["LICENSE"]
@@ -37,7 +36,12 @@ build-backend = "hatchling.build"
 
 [tool.setuptools]
 
+[project.optional-dependencies]
+tts = ["moviepy>=2.0"]
+asr = ["openai-whisper>=20231117"]
+azure = ["azure-cognitiveservices-speech>=1.37"]
+
 [dependency-groups]
 dev = [
-    "pytest",
+    "pytest>=8.0",
 ]

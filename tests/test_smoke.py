@@ -147,6 +147,18 @@ def test_split_string_by_punctuations_is_local_to_funtalk():
     assert "funvideo" not in sys.modules
 
 
+def test_edge_voice_listing_has_no_stdout(monkeypatch, capsys):
+    """列出语音不应把诊断信息写到标准输出。"""
+    import funtalk.tts._edge as edge_mod
+
+    async def fake_list_voices():
+        return [{"Name": "x", "Locale": "zh-CN", "Gender": "Female"}]
+
+    monkeypatch.setattr(edge_mod, "list_voices", fake_list_voices)
+    assert edge_mod.EdgeTTS.list_voices() == [{"Name": "x", "Locale": "zh-CN", "Gender": "Female"}]
+    assert capsys.readouterr().out == ""
+
+
 # ---------------------------------------------------------------------------
 # 4. TTS：EdgeTTS（mock 掉真实的 edge_tts 网络调用）
 # ---------------------------------------------------------------------------
@@ -321,7 +333,7 @@ def test_whisper_asr_on_progress_reports_real_frame_progress():
     （whisper.transcribe 的真实公开参数）关掉这个跳过优化，只是为了让测试
     音频也能走到 pbar.update 那条路径，不是在 mock 或绕过被测代码本身。
     """
-    import numpy as np
+    np = pytest.importorskip("numpy")
 
     from funtalk.asr import WhisperASR
 
@@ -348,7 +360,7 @@ def test_whisper_asr_on_progress_reports_real_frame_progress():
 
 def test_whisper_asr_transcribe_without_on_progress_still_works():
     """确认不传 on_progress 时（现有调用方式）行为不受影响。"""
-    import numpy as np
+    np = pytest.importorskip("numpy")
 
     from funtalk.asr import WhisperASR
 

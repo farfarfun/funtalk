@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 
 from edge_tts import SubMaker
-from funutil import getLogger
+from farlog import getLogger
 
 from .base import BaseTTS
 
@@ -10,6 +10,7 @@ logger = getLogger("funtalk")
 
 
 class AzureTTS(BaseTTS):
+    """基于 Azure Speech SDK 的语音合成实现。"""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1054,13 +1055,6 @@ class AzureTTS(BaseTTS):
                 def speech_synthesizer_word_boundary_cb(
                     evt: speechsdk.SessionEventArgs,
                 ):
-                    # print('WordBoundary event:')
-                    # print('\tBoundaryType: {}'.format(evt.boundary_type))
-                    # print('\tAudioOffset: {}ms'.format((evt.audio_offset + 5000)))
-                    # print('\tDuration: {}'.format(evt.duration))
-                    # print('\tText: {}'.format(evt.text))
-                    # print('\tTextOffset: {}'.format(evt.text_offset))
-                    # print('\tWordLength: {}'.format(evt.word_length))
 
                     duration = _format_duration_to_offset(str(evt.duration))
                     offset = _format_duration_to_offset(evt.audio_offset)

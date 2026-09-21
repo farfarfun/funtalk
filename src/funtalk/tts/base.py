@@ -4,8 +4,7 @@ from xml.sax.saxutils import unescape
 
 from edge_tts import SubMaker
 from edge_tts.submaker import mktimestamp
-from funutil import getLogger
-from moviepy.video.tools import subtitles
+from farlog import getLogger
 
 from funtalk._util import split_string_by_punctuations
 
@@ -13,13 +12,16 @@ logger = getLogger("funtalk")
 
 
 class BaseTTS:
-    def __init__(self, voice_name, *args, **kwargs):
+    """TTS 引擎的统一接口和字幕生成逻辑。"""
+
+    def __init__(self, voice_name: str, *args, **kwargs) -> None:
+        """初始化语音名称。"""
         self.voice_name = self.parse_voice_name(voice_name)
         self.sub_maker: SubMaker = None
 
     def _tts(
         self, text: str, voice_rate: float, voice_file: str, *args, **kwargs
-    ) -> [SubMaker, None]:
+    ) -> SubMaker | None:
         raise NotImplementedError()
 
     @staticmethod
@@ -40,7 +42,7 @@ class BaseTTS:
 
     def create_subtitle(
         self, text: str, subtitle_file: str, *args, **kwargs
-    ) -> [SubMaker, None]:
+    ) -> None:
         """
         优化字幕文件
         1. 将字幕文件按照标点符号分割成多行
@@ -110,6 +112,8 @@ class BaseTTS:
                 with open(subtitle_file, "w", encoding="utf-8") as file:
                     file.write("\n".join(sub_items) + "\n")
                 try:
+                    from moviepy.video.tools import subtitles
+
                     sbs = subtitles.file_to_subtitles(subtitle_file, encoding="utf-8")
                     duration = max([tb for ((ta, tb), txt) in sbs])
                     logger.info(
@@ -134,7 +138,7 @@ class BaseTTS:
         subtitle_file: str = None,
         *args,
         **kwargs,
-    ) -> [SubMaker, None]:
+    ) -> SubMaker | None:
         text = self._format_text(text)
         self.sub_maker = self._tts(
             text=text, voice_rate=voice_rate, voice_file=voice_file, *args, **kwargs
@@ -145,10 +149,8 @@ class BaseTTS:
             )
         return self.sub_maker
 
-    def get_audio_duration(self):
-        """
-        获取音频时长
-        """
+    def get_audio_duration(self) -> float:
+        """返回最近一次合成音频的时长（秒）。"""
         if not self.sub_maker.offset:
             return 0.0
         return self.sub_maker.offset[-1][1] / 10000000

@@ -8,7 +8,13 @@
 pip install funtalk
 ```
 
-注意：仓库的 `pyproject.toml` 目前没有声明任何运行依赖（`dependencies = []`），实际使用时需要自行安装 `edge-tts`、`openai-whisper`、`funutil`、`moviepy`，如果要用 Azure TTS 还需要 `azure-cognitiveservices-speech`。TTS 模块还直接 `import` 了 `funvideo.app.utils` / `funvideo.app.config`（属于对 funvideo 内部模块的紧耦合），脱离 funvideo 项目单独使用会因为缺依赖而报错。
+基础 TTS 依赖已在项目配置中声明；按需安装可选功能：
+
+```bash
+pip install 'funtalk[tts]'  # 字幕校验和 TTS 工具
+pip install 'funtalk[asr]'  # Whisper ASR（包含较重的模型依赖）
+pip install 'funtalk[azure]'  # Azure TTS SDK
+```
 
 ## TTS：文字转语音
 
@@ -27,7 +33,7 @@ tts_generate(
 `BaseTTS`（`funtalk/tts/base.py`）定义了统一接口：`create_tts()` 生成音频，并能根据引擎返回的时间戳，把文本按标点切分对齐后生成 SRT 字幕（`create_subtitle`）。目前有两个实现：
 
 - `funtalk.tts._edge.EdgeTTS`：基于 [edge-tts](https://github.com/rany2/edge-tts)，包一级导出的 `tts_generate` / `edge_tts_generate` 就是它。
-- `funtalk.tts._azure.AzureTTS`：基于 Azure 认知服务语音合成，需要从 `funtalk.tts._azure` 单独导入，依赖 `azure-cognitiveservices-speech` 以及 funvideo 配置里的 `speech_key`/`speech_region`。
+- `funtalk.tts._azure.AzureTTS`：基于 Azure 认知服务语音合成，需要从 `funtalk.tts._azure` 单独导入，并设置 `AZURE_SPEECH_KEY` 与 `AZURE_SPEECH_REGION` 环境变量。
 
 ## ASR：语音转文字
 
@@ -39,3 +45,16 @@ result = asr.transcribe("audio.mp3", language="ZH")
 ```
 
 `BaseASR`（`funtalk/asr/base.py`）定义了 `load()` / `transcribe()` 接口，目前只有 `WhisperASR` 一个实现。
+
+---
+
+## 关于 farfarfun
+
+[farfarfun](https://github.com/farfarfun) 是一个专注于实用工具库的开源组织，
+涵盖云存储、数据处理、AI、多媒体与开发工具链等方向。
+
+- 🏠 组织主页：<https://github.com/farfarfun>
+- 📦 PyPI：<https://pypi.org/user/niuliangtao/>
+- 📧 联系：farfarfun@qq.com
+
+本项目基于 [MIT](LICENSE) 协议开源。

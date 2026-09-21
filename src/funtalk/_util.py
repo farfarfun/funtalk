@@ -28,8 +28,9 @@ PUNCTUATIONS = [
 ]
 
 
-def split_string_by_punctuations(s):
-    result = []
+def split_string_by_punctuations(s: str) -> list[str]:
+    """按标点和换行拆分文本，过滤空行并保留小数点。"""
+    result: list[str] = []
     txt = ""
 
     previous_char = ""
