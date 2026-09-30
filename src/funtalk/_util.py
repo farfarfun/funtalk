@@ -1,11 +1,9 @@
-"""Small self-contained helpers.
+"""不依赖外部项目的轻量工具函数。
 
-``split_string_by_punctuations`` used to be pulled in from
-``funvideo.app.utils.utils`` (with ``PUNCTUATIONS`` from
-``funvideo.app.models.const``), but that made funtalk depend on funvideo
-while funvideo's own pyproject.toml depends on funtalk -- a circular
-dependency (farfarfun/todo-list#156). Copied here instead since it's a
-small, pure, dependency-free helper.
+``split_string_by_punctuations`` 原先从 ``funvideo.app.utils.utils`` 引入，
+``PUNCTUATIONS`` 则来自 ``funvideo.app.models.const``。这会让 funtalk 依赖
+funvideo，而 funvideo 的 pyproject.toml 又依赖 funtalk，形成循环依赖
+（farfarfun/todo-list#156）。该函数体量小、无副作用且不依赖第三方库，因此移至此处。
 """
 
 PUNCTUATIONS = [
@@ -58,6 +56,6 @@ def split_string_by_punctuations(s: str) -> list[str]:
             result.append(txt.strip())
             txt = ""
     result.append(txt.strip())
-    # filter empty string
+    # 过滤空字符串
     result = list(filter(None, result))
     return result

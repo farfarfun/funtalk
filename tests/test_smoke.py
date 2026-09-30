@@ -259,19 +259,24 @@ def azure_tts_class():
 def test_azure_tts_reads_credentials_from_env_not_funvideo_config(
     azure_tts_class, tmp_path, monkeypatch
 ):
-    """#156: Azure speech_key/speech_region used to come from
-    funvideo.app.config.config.azure; now read straight from env vars,
-    with no funvideo import involved at all."""
+    """Azure SDK 配置应直接读取环境变量，且不导入 funvideo。"""
     import sys
 
     assert "funvideo" not in sys.modules
 
     monkeypatch.setenv("AZURE_SPEECH_KEY", "test-key")
     monkeypatch.setenv("AZURE_SPEECH_REGION", "test-region")
-    import os
+    speechsdk, speech_config = _install_fake_azure_sdk(monkeypatch)
+    client = azure_tts_class(voice_name="zh-CN-XiaoxiaoNeural-Female")
 
-    assert os.environ["AZURE_SPEECH_KEY"] == "test-key"
-    assert os.environ["AZURE_SPEECH_REGION"] == "test-region"
+    result = client._tts("你好", 1.0, str(tmp_path / "out.mp3"))
+
+    speechsdk.SpeechConfig.assert_called_once_with(
+        subscription="test-key", region="test-region"
+    )
+    assert result.subs == ["你好"]
+    assert result.offset == [(0, 10000000)]
+    assert speech_config.speech_synthesis_voice_name == "zh-CN-XiaoxiaoNeural"
 
 
 def test_azure_tts_construction(azure_tts_class):
@@ -293,25 +298,86 @@ def test_azure_tts_check_strips_v2_suffix(azure_tts_class):
     assert azure_tts_class.check("zh-CN-XiaoxiaoNeural") == "zh-CN-XiaoxiaoNeural"
 
 
-def test_azure_tts_generate_without_sdk_returns_none_sub_maker(
-    azure_tts_class, tmp_path
-):
-    """
-    未安装 azure-cognitiveservices-speech（真实语音合成 SDK，需要真实 Azure
-    订阅凭据才能真正调用）时，AzureTTS._tts 会捕获 ImportError 并重试 3 次后
-    返回 None，而不是抛异常——这里验证该降级行为，不做真实的语音合成。
-    """
-    import funtalk.tts._azure as azure_mod
-
-    voice_file = str(tmp_path / "out.mp3")
-    client = azure_mod.tts_generate(
-        text="hello",
-        voice_name="zh-CN-XiaoxiaoNeural-Female",
-        voice_rate=1.0,
-        voice_file=voice_file,
-        subtitle_file=None,
+def _install_fake_azure_sdk(monkeypatch, *, reason="completed", failure=None):
+    """安装最小 Azure SDK 桩，并返回 SDK 模块和语音配置对象。"""
+    speechsdk = types.ModuleType("azure.cognitiveservices.speech")
+    speech_config = MagicMock()
+    speechsdk.SpeechConfig = MagicMock(return_value=speech_config)
+    speechsdk.PropertyId = types.SimpleNamespace(
+        SpeechServiceResponse_RequestWordBoundary="word-boundary"
     )
-    assert client.sub_maker is None
+    speechsdk.SpeechSynthesisOutputFormat = types.SimpleNamespace(
+        Audio48Khz192KBitRateMonoMp3="mp3"
+    )
+    speechsdk.ResultReason = types.SimpleNamespace(
+        SynthesizingAudioCompleted="completed", Canceled="canceled"
+    )
+    speechsdk.CancellationReason = types.SimpleNamespace(Error="error")
+    speechsdk.SessionEventArgs = object
+    speechsdk.audio = types.SimpleNamespace(AudioOutputConfig=MagicMock())
+
+    class FakeSignal:
+        def __init__(self):
+            self.callback = None
+
+        def connect(self, callback):
+            self.callback = callback
+
+    class FakeSynthesizer:
+        def __init__(self, **kwargs):
+            self.synthesis_word_boundary = FakeSignal()
+
+        def speak_text_async(self, text):
+            if failure is not None:
+                raise failure
+            if reason == "completed":
+                event = types.SimpleNamespace(
+                    duration="00:00:01.000000", audio_offset=0, text=text
+                )
+                self.synthesis_word_boundary.callback(event)
+            details = types.SimpleNamespace(
+                reason="error", error_details="凭据无效"
+            )
+            result = types.SimpleNamespace(
+                reason=reason, cancellation_details=details
+            )
+            return types.SimpleNamespace(get=lambda: result)
+
+    speechsdk.SpeechSynthesizer = FakeSynthesizer
+    azure = types.ModuleType("azure")
+    cognitive = types.ModuleType("azure.cognitiveservices")
+    azure.cognitiveservices = cognitive
+    cognitive.speech = speechsdk
+    monkeypatch.setitem(sys.modules, "azure", azure)
+    monkeypatch.setitem(sys.modules, "azure.cognitiveservices", cognitive)
+    monkeypatch.setitem(sys.modules, "azure.cognitiveservices.speech", speechsdk)
+    return speechsdk, speech_config
+
+
+def test_azure_tts_cancellation_raises_domain_error(
+    azure_tts_class, tmp_path, monkeypatch
+):
+    from funtalk.tts._azure import AzureSynthesisError
+
+    _install_fake_azure_sdk(monkeypatch, reason="canceled")
+    client = azure_tts_class(voice_name="zh-CN-XiaoxiaoNeural-Female")
+
+    with pytest.raises(AzureSynthesisError, match="凭据无效"):
+        client._tts("你好", 1.0, str(tmp_path / "out.mp3"))
+
+
+def test_azure_tts_runtime_error_preserves_cause(
+    azure_tts_class, tmp_path, monkeypatch
+):
+    from funtalk.tts._azure import AzureSynthesisError
+
+    failure = RuntimeError("服务不可用")
+    _install_fake_azure_sdk(monkeypatch, failure=failure)
+    client = azure_tts_class(voice_name="zh-CN-XiaoxiaoNeural-Female")
+
+    with pytest.raises(AzureSynthesisError) as exc_info:
+        client._tts("你好", 1.0, str(tmp_path / "out.mp3"))
+    assert exc_info.value.__cause__ is failure
 
 
 def test_azure_tts_real_speech_synthesis_requires_credentials():

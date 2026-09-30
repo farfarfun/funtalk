@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import Any
 
 from edge_tts import SubMaker
 from farlog import getLogger
@@ -9,12 +10,19 @@ from .base import BaseTTS
 logger = getLogger("funtalk")
 
 
+class AzureSynthesisError(RuntimeError):
+    """Azure 语音合成失败时抛出的领域异常。"""
+
+
 class AzureTTS(BaseTTS):
     """基于 Azure Speech SDK 的语音合成实现。"""
-    def __init__(self, *args, **kwargs):
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """初始化 Azure TTS 客户端。"""
         super().__init__(*args, **kwargs)
 
-    def get_all_voice_name(self, filter_locals=None) -> list[str]:
+    def get_all_voice_name(self, filter_locals: list[str] | None = None) -> list[str]:
+        """返回指定区域的 Azure 语音名称列表。"""
         if filter_locals is None:
             filter_locals = ["zh-CN", "en-US", "zh-HK", "zh-TW", "vi-VN"]
         voices_str = """
@@ -1014,21 +1022,27 @@ class AzureTTS(BaseTTS):
         return voices
 
     @staticmethod
-    def check(voice_name: str):
+    def check(voice_name: str) -> str:
+        """移除 Azure V2 语音名称的版本后缀。"""
         if voice_name.endswith("-V2"):
             return voice_name.replace("-V2", "").strip()
         return voice_name
 
     def _tts(
-        self, text: str, voice_rate: float, voice_file: str, *args, **kwargs
-    ) -> [SubMaker, None]:
+        self,
+        text: str,
+        voice_rate: float,
+        voice_file: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> SubMaker:
         voice_name = self.check(self.voice_name)
         if not voice_name:
             logger.error(f"invalid voice name: {voice_name}")
             raise ValueError(f"invalid voice name: {voice_name}")
         text = text.strip()
 
-        def _format_duration_to_offset(duration) -> int:
+        def _format_duration_to_offset(duration: str | int) -> int:
             if isinstance(duration, str):
                 time_obj = datetime.strptime(duration, "%H:%M:%S.%f")
                 milliseconds = (
@@ -1044,75 +1058,71 @@ class AzureTTS(BaseTTS):
 
             return 0
 
-        for i in range(3):
-            try:
-                logger.info(f"start, voice name: {voice_name}, try: {i + 1}")
+        logger.info(f"start, voice name: {voice_name}")
+        try:
+            import azure.cognitiveservices.speech as speechsdk
+        except ImportError as exc:
+            raise AzureSynthesisError("未安装 Azure Speech SDK") from exc
 
-                import azure.cognitiveservices.speech as speechsdk
+        sub_maker = SubMaker()
 
-                sub_maker = SubMaker()
+        def speech_synthesizer_word_boundary_cb(
+            evt: speechsdk.SessionEventArgs,
+        ) -> None:
 
-                def speech_synthesizer_word_boundary_cb(
-                    evt: speechsdk.SessionEventArgs,
-                ):
+            duration = _format_duration_to_offset(str(evt.duration))
+            offset = _format_duration_to_offset(evt.audio_offset)
+            sub_maker.subs.append(evt.text)
+            sub_maker.offset.append((offset, offset + duration))
 
-                    duration = _format_duration_to_offset(str(evt.duration))
-                    offset = _format_duration_to_offset(evt.audio_offset)
-                    sub_maker.subs.append(evt.text)
-                    sub_maker.offset.append((offset, offset + duration))
+        # 使用订阅密钥和服务区域创建语音配置。
+        speech_key = os.environ.get("AZURE_SPEECH_KEY", "")
+        service_region = os.environ.get("AZURE_SPEECH_REGION", "")
+        try:
+            audio_config = speechsdk.audio.AudioOutputConfig(
+                filename=voice_file, use_default_speaker=True
+            )
+            speech_config = speechsdk.SpeechConfig(
+                subscription=speech_key, region=service_region
+            )
+            speech_config.speech_synthesis_voice_name = voice_name
+            speech_config.set_property(
+                property_id=speechsdk.PropertyId.SpeechServiceResponse_RequestWordBoundary,
+                value="true",
+            )
 
-                # Creates an instance of a speech config with specified subscription key and service region.
-                speech_key = os.environ.get("AZURE_SPEECH_KEY", "")
-                service_region = os.environ.get("AZURE_SPEECH_REGION", "")
-                audio_config = speechsdk.audio.AudioOutputConfig(
-                    filename=voice_file, use_default_speaker=True
-                )
-                speech_config = speechsdk.SpeechConfig(
-                    subscription=speech_key, region=service_region
-                )
-                speech_config.speech_synthesis_voice_name = voice_name
-                # speech_config.set_property(property_id=speechsdk.PropertyId.SpeechServiceResponse_RequestSentenceBoundary,
-                #                            value='true')
-                speech_config.set_property(
-                    property_id=speechsdk.PropertyId.SpeechServiceResponse_RequestWordBoundary,
-                    value="true",
-                )
+            speech_config.set_speech_synthesis_output_format(
+                speechsdk.SpeechSynthesisOutputFormat.Audio48Khz192KBitRateMonoMp3
+            )
+            speech_synthesizer = speechsdk.SpeechSynthesizer(
+                audio_config=audio_config, speech_config=speech_config
+            )
+            speech_synthesizer.synthesis_word_boundary.connect(
+                speech_synthesizer_word_boundary_cb
+            )
 
-                speech_config.set_speech_synthesis_output_format(
-                    speechsdk.SpeechSynthesisOutputFormat.Audio48Khz192KBitRateMonoMp3
-                )
-                speech_synthesizer = speechsdk.SpeechSynthesizer(
-                    audio_config=audio_config, speech_config=speech_config
-                )
-                speech_synthesizer.synthesis_word_boundary.connect(
-                    speech_synthesizer_word_boundary_cb
-                )
+            result = speech_synthesizer.speak_text_async(text).get()
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise AzureSynthesisError(
+                f"Azure 语音合成调用失败：{voice_file}"
+            ) from exc
 
-                result = speech_synthesizer.speak_text_async(text).get()
-                if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
-                    logger.success(f"azure v2 speech synthesis succeeded: {voice_file}")
-                    return sub_maker
-                elif result.reason == speechsdk.ResultReason.Canceled:
-                    cancellation_details = result.cancellation_details
-                    logger.error(
-                        f"azure v2 speech synthesis canceled: {cancellation_details.reason}"
-                    )
-                    if (
-                        cancellation_details.reason
-                        == speechsdk.CancellationReason.Error
-                    ):
-                        logger.error(
-                            f"azure v2 speech synthesis error: {cancellation_details.error_details}"
-                        )
-                logger.info(f"completed, output file: {voice_file}")
-            except Exception as e:
-                logger.error(f"failed, error: {str(e)}")
-        return None
+        if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+            logger.success(f"azure v2 speech synthesis succeeded: {voice_file}")
+            return sub_maker
+        if result.reason == speechsdk.ResultReason.Canceled:
+            details = result.cancellation_details
+            message = f"Azure 语音合成已取消：{details.reason}"
+            if details.reason == speechsdk.CancellationReason.Error:
+                message += f"，{details.error_details}"
+            raise AzureSynthesisError(message)
+        raise AzureSynthesisError(f"Azure 语音合成返回未知状态：{result.reason}")
 
 
 def tts_generate(
     text: str, voice_name: str, voice_rate: float, voice_file: str, subtitle_file: str
-) -> [BaseTTS, None]:
+) -> BaseTTS:
+    """合成语音并返回 Azure TTS 客户端。"""
     client = AzureTTS(voice_name=voice_name)
     client.create_tts(
         text=text,
