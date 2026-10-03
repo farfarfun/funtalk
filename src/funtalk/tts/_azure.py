@@ -1,13 +1,33 @@
 import os
+import re
 from datetime import datetime
 from typing import Any
+from xml.sax.saxutils import escape
 
 from edge_tts import SubMaker
 from farlog import getLogger
 
+from funtalk._util import convert_rate_to_percent
+
 from .base import BaseTTS
 
 logger = getLogger("funtalk")
+
+_LOCALE_PREFIX = re.compile(r"^([a-zA-Z]{2,3}-[a-zA-Z]{2,})-")
+
+
+def _locale_from_voice_name(voice_name: str, default: str = "zh-CN") -> str:
+    """从 Azure 语音名称推断 SSML 所需的 `xml:lang` 区域代码。
+
+    Args:
+        voice_name: Azure 语音名称，例如 ``"zh-CN-XiaoxiaoNeural"``。
+        default: 无法识别时使用的回退区域代码。
+
+    Returns:
+        形如 ``"zh-CN"`` 的区域代码；无法识别前缀时返回 `default`。
+    """
+    match = _LOCALE_PREFIX.match(voice_name)
+    return match.group(1) if match else default
 
 
 class AzureSynthesisError(RuntimeError):
@@ -1101,7 +1121,19 @@ class AzureTTS(BaseTTS):
                 speech_synthesizer_word_boundary_cb
             )
 
-            result = speech_synthesizer.speak_text_async(text).get()
+            # 必须用 SSML 的 <prosody rate="..."> 承载语速，speak_text_async
+            # 不接受语速参数——此前直接调用 speak_text_async(text) 会让
+            # voice_rate 形参被静默忽略，合成结果恒为默认语速。
+            rate_str = convert_rate_to_percent(voice_rate)
+            locale = _locale_from_voice_name(voice_name)
+            ssml = (
+                f'<speak version="1.0" '
+                f'xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{locale}">'
+                f'<voice name="{voice_name}">'
+                f'<prosody rate="{rate_str}">{escape(text)}</prosody>'
+                f"</voice></speak>"
+            )
+            result = speech_synthesizer.speak_ssml_async(ssml).get()
         except (OSError, RuntimeError, ValueError) as exc:
             raise AzureSynthesisError(
                 f"Azure 语音合成调用失败：{voice_file}"
@@ -1122,7 +1154,23 @@ class AzureTTS(BaseTTS):
 def tts_generate(
     text: str, voice_name: str, voice_rate: float, voice_file: str, subtitle_file: str
 ) -> BaseTTS:
-    """合成语音并返回 Azure TTS 客户端。"""
+    """合成语音并返回 Azure TTS 客户端。
+
+    Args:
+        text: 待合成的文本。
+        voice_name: Azure 语音名称，例如 ``"zh-CN-XiaoxiaoNeural"``；允许带
+            `-Female`/`-Male`/`-V2` 后缀，内部会自动归一化。
+        voice_rate: 语速倍率，1.0 为正常语速，通过 SSML `<prosody rate="...">` 生效。
+        voice_file: 合成音频的输出路径。
+        subtitle_file: 对齐字幕的输出路径；生成字幕依赖可选依赖 ``funtalk[tts]``
+            （moviepy），未安装时会抛出 `SubtitleGenerationError`。
+
+    Returns:
+        已完成合成的 `AzureTTS` 客户端实例，可通过 `client.sub_maker` 获取字幕时间戳。
+
+    Raises:
+        AzureSynthesisError: 缺少 Azure Speech SDK、调用失败或合成被取消时抛出。
+    """
     client = AzureTTS(voice_name=voice_name)
     client.create_tts(
         text=text,

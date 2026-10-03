@@ -1,7 +1,7 @@
 [project]
 name = "funtalk"
 version = "1.0.31"
-description = "funtalk"
+description = "语音处理统一封装：支持 Whisper ASR 及 Azure、Edge TTS"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

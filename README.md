@@ -8,7 +8,7 @@
 pip install funtalk
 ```
 
-基础 TTS 依赖已在项目配置中声明；按需安装可选功能：
+基础安装只包含 edge-tts（默认 TTS 实现），按需安装可选功能：
 
 ```bash
 pip install 'funtalk[tts]'  # 字幕校验和 TTS 工具
@@ -18,6 +18,10 @@ pip install 'funtalk[azure]'  # Azure TTS SDK
 
 ## TTS：文字转语音
 
+示例中的 `subtitle_file` 参数会触发字幕校验，依赖可选依赖 moviepy，
+请先 `pip install 'funtalk[tts]'` 再运行；只合成音频、不生成字幕可以
+省略 `subtitle_file`，这样基础安装（`pip install funtalk`）即可运行。
+
 ```python
 from funtalk.tts import tts_generate  # 包一级导出的默认是 edge-tts 实现
 
@@ -26,7 +30,7 @@ tts_generate(
     voice_name="zh-CN-XiaoxiaoNeural",
     voice_rate=1.0,
     voice_file="out.mp3",
-    subtitle_file="out.srt",
+    subtitle_file="out.srt",  # 需要 pip install 'funtalk[tts]'（moviepy）
 )
 ```
 

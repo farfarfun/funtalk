@@ -21,6 +21,7 @@ funvideo 的全局 config 单例（该单例本身在 import 时还有读取 `./
 """
 
 import asyncio
+import re
 import sys
 import types
 from unittest.mock import MagicMock, patch
@@ -279,6 +280,27 @@ def test_azure_tts_reads_credentials_from_env_not_funvideo_config(
     assert speech_config.speech_synthesis_voice_name == "zh-CN-XiaoxiaoNeural"
 
 
+def test_azure_tts_applies_voice_rate_via_ssml(azure_tts_class, tmp_path, monkeypatch):
+    """回归测试：voice_rate 必须真正传给 Azure，而不是被静默忽略。
+
+    此前 `_tts` 调用 `speak_text_async(text)`，voice_rate 形参从未被使用，
+    合成结果恒为默认语速。修复后通过 SSML `<prosody rate="...">` 生效。
+    """
+    monkeypatch.setenv("AZURE_SPEECH_KEY", "test-key")
+    monkeypatch.setenv("AZURE_SPEECH_REGION", "test-region")
+    speechsdk, _ = _install_fake_azure_sdk(monkeypatch)
+    client = azure_tts_class(voice_name="zh-CN-XiaoxiaoNeural-Female")
+
+    client._tts("你好", 1.5, str(tmp_path / "out.mp3"))
+
+    assert len(speechsdk.synthesizers) == 1
+    ssml = speechsdk.synthesizers[0].last_ssml
+    assert '<prosody rate="+50%">' in ssml
+    assert 'xml:lang="zh-CN"' in ssml
+    assert '<voice name="zh-CN-XiaoxiaoNeural">' in ssml
+    assert "你好" in ssml
+
+
 def test_azure_tts_construction(azure_tts_class):
     tts = azure_tts_class(voice_name="zh-CN-XiaoxiaoNeural-Female")
     assert tts.voice_name == "zh-CN-XiaoxiaoNeural"
@@ -323,16 +345,25 @@ def _install_fake_azure_sdk(monkeypatch, *, reason="completed", failure=None):
         def connect(self, callback):
             self.callback = callback
 
+    synthesizers = []
+
     class FakeSynthesizer:
         def __init__(self, **kwargs):
             self.synthesis_word_boundary = FakeSignal()
+            self.last_ssml = None
+            synthesizers.append(self)
 
-        def speak_text_async(self, text):
+        def speak_ssml_async(self, ssml):
+            self.last_ssml = ssml
             if failure is not None:
                 raise failure
             if reason == "completed":
+                # 从 SSML 的 <prosody> 内容里取出原始文本，模拟 Azure 真实
+                # 按合成文本（而非整段 SSML）触发 word boundary 事件的行为。
+                match = re.search(r"<prosody[^>]*>(.*?)</prosody>", ssml, re.DOTALL)
+                spoken_text = match.group(1) if match else ssml
                 event = types.SimpleNamespace(
-                    duration="00:00:01.000000", audio_offset=0, text=text
+                    duration="00:00:01.000000", audio_offset=0, text=spoken_text
                 )
                 self.synthesis_word_boundary.callback(event)
             details = types.SimpleNamespace(
@@ -344,6 +375,7 @@ def _install_fake_azure_sdk(monkeypatch, *, reason="completed", failure=None):
             return types.SimpleNamespace(get=lambda: result)
 
     speechsdk.SpeechSynthesizer = FakeSynthesizer
+    speechsdk.synthesizers = synthesizers
     azure = types.ModuleType("azure")
     cognitive = types.ModuleType("azure.cognitiveservices")
     azure.cognitiveservices = cognitive

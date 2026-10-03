@@ -26,6 +26,27 @@ PUNCTUATIONS = [
 ]
 
 
+def convert_rate_to_percent(rate: float) -> str:
+    """把语速倍率换算成 TTS 引擎接受的百分比字符串。
+
+    edge-tts 与 Azure Speech SDK（SSML `<prosody rate="...">`）都接受同样
+    格式的相对百分比字符串，因此两个后端共用这一转换逻辑。
+
+    Args:
+        rate: 语速倍率，1.0 表示正常语速，大于 1 加速、小于 1 减速。
+
+    Returns:
+        带符号的百分比字符串，例如 ``"+20%"``、``"-10%"``、``"+0%"``。
+    """
+    if rate == 1.0:
+        return "+0%"
+    percent = round((rate - 1.0) * 100)
+    if percent > 0:
+        return f"+{percent}%"
+    else:
+        return f"{percent}%"
+
+
 def split_string_by_punctuations(s: str) -> list[str]:
     """按标点和换行拆分文本，过滤空行并保留小数点。"""
     result: list[str] = []
