@@ -195,3 +195,4 @@ logs/
 CLAUDE.local.md
 AGENTS.local.md
 *.log.gz
+uv.lock
