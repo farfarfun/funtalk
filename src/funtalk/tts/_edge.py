@@ -28,7 +28,15 @@ class EdgeTTS(BaseTTS):
 
     @staticmethod
     def list_voices(gender: str | None = None, locale: str | None = "zh-CN") -> list[dict]:
-        """列出指定性别和区域的可用语音。"""
+        """列出指定性别和区域的可用语音。
+
+        Args:
+            gender: 要筛选的语音性别；为 `None` 时不按性别筛选。
+            locale: 要筛选的区域代码；为 `None` 时不按区域筛选。
+
+        Returns:
+            匹配筛选条件的 edge-tts 语音信息字典列表。
+        """
         result = []
         voice_list = asyncio.run(list_voices())
         for voice in voice_list:
@@ -66,7 +74,11 @@ class EdgeTTS(BaseTTS):
 
 
 def tts_generate(
-    text: str, voice_name: str, voice_rate: float, voice_file: str, subtitle_file: str
+    text: str,
+    voice_name: str,
+    voice_rate: float,
+    voice_file: str,
+    subtitle_file: str | None = None,
 ) -> BaseTTS:
     """合成语音并返回 Edge TTS 客户端。
 
@@ -75,8 +87,9 @@ def tts_generate(
         voice_name: edge-tts 语音名称，例如 ``"zh-CN-XiaoxiaoNeural"``。
         voice_rate: 语速倍率，1.0 为正常语速。
         voice_file: 合成音频的输出路径。
-        subtitle_file: 对齐字幕的输出路径；生成字幕依赖可选依赖 ``funtalk[tts]``
-            （moviepy），未安装时会抛出 `SubtitleGenerationError`。
+        subtitle_file: 可选的对齐字幕输出路径；生成字幕依赖可选依赖
+            ``funtalk[tts]``（moviepy），未安装时会抛出 `SubtitleGenerationError`。
+            默认为 `None`，仅合成音频。
 
     Returns:
         已完成合成的 `EdgeTTS` 客户端实例，可通过 `client.sub_maker` 获取字幕时间戳。

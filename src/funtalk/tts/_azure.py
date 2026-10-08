@@ -42,7 +42,15 @@ class AzureTTS(BaseTTS):
         super().__init__(*args, **kwargs)
 
     def get_all_voice_name(self, filter_locals: list[str] | None = None) -> list[str]:
-        """返回指定区域的 Azure 语音名称列表。"""
+        """返回指定区域的 Azure 语音名称列表。
+
+        Args:
+            filter_locals: 用于筛选语音名称前缀的区域代码列表；为 `None` 时使用
+                内置的常用区域列表。
+
+        Returns:
+            按字母顺序排列、包含性别后缀的 Azure 语音名称列表。
+        """
         if filter_locals is None:
             filter_locals = ["zh-CN", "en-US", "zh-HK", "zh-TW", "vi-VN"]
         voices_str = """
@@ -1152,7 +1160,11 @@ class AzureTTS(BaseTTS):
 
 
 def tts_generate(
-    text: str, voice_name: str, voice_rate: float, voice_file: str, subtitle_file: str
+    text: str,
+    voice_name: str,
+    voice_rate: float,
+    voice_file: str,
+    subtitle_file: str | None = None,
 ) -> BaseTTS:
     """合成语音并返回 Azure TTS 客户端。
 
@@ -1162,8 +1174,9 @@ def tts_generate(
             `-Female`/`-Male`/`-V2` 后缀，内部会自动归一化。
         voice_rate: 语速倍率，1.0 为正常语速，通过 SSML `<prosody rate="...">` 生效。
         voice_file: 合成音频的输出路径。
-        subtitle_file: 对齐字幕的输出路径；生成字幕依赖可选依赖 ``funtalk[tts]``
-            （moviepy），未安装时会抛出 `SubtitleGenerationError`。
+        subtitle_file: 可选的对齐字幕输出路径；生成字幕依赖可选依赖
+            ``funtalk[tts]``（moviepy），未安装时会抛出 `SubtitleGenerationError`。
+            默认为 `None`，仅合成音频。
 
     Returns:
         已完成合成的 `AzureTTS` 客户端实例，可通过 `client.sub_maker` 获取字幕时间戳。
