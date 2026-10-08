@@ -222,7 +222,6 @@ def test_edge_tts_generate_function_mocked(tmp_path):
             voice_name="zh-CN-XiaoxiaoNeural-Female",
             voice_rate=1.0,
             voice_file=voice_file,
-            subtitle_file=None,
         )
 
     assert client.sub_maker is not None

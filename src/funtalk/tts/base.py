@@ -53,11 +53,19 @@ class BaseTTS:
     def create_subtitle(
         self, text: str, subtitle_file: str, *args: Any, **kwargs: Any
     ) -> None:
-        """
-        优化字幕文件
-        1. 将字幕文件按照标点符号分割成多行
-        2. 逐行匹配字幕文件中的文本
-        3. 生成新的字幕文件
+        """根据合成时间戳生成、优化并校验 SRT 字幕文件。
+
+        Args:
+            text: 用于按标点切分并匹配字幕的原始文本。
+            subtitle_file: 要写入的 SRT 字幕文件路径。
+            *args: 保留给子类扩展的额外位置参数。
+            **kwargs: 保留给子类扩展的额外关键字参数。
+
+        Returns:
+            无返回值；成功时将字幕写入 `subtitle_file`。
+
+        Raises:
+            SubtitleGenerationError: 缺少时间戳、文本无法完整匹配或字幕校验失败时抛出。
         """
 
         def formatter(
@@ -148,7 +156,19 @@ class BaseTTS:
         *args: Any,
         **kwargs: Any,
     ) -> SubMaker | None:
-        """合成语音，并按需生成与校验字幕文件。"""
+        """合成语音，并按需生成与校验字幕文件。
+
+        Args:
+            text: 待合成的文本。
+            voice_rate: 语速倍率，具体支持范围由 TTS 实现决定。
+            voice_file: 合成音频的输出路径。
+            subtitle_file: 可选的 SRT 字幕输出路径；为 `None` 时仅合成音频。
+            *args: 传递给具体 TTS 实现的额外位置参数。
+            **kwargs: 传递给具体 TTS 实现的额外关键字参数。
+
+        Returns:
+            TTS 引擎生成的字幕时间戳对象；引擎未提供时间戳时返回 `None`。
+        """
         text = self._format_text(text)
         self.sub_maker = self._tts(
             text=text, voice_rate=voice_rate, voice_file=voice_file, *args, **kwargs
